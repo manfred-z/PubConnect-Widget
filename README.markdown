@@ -9,3 +9,22 @@ En met PubConnect kan een netwerk worden gecreëerd rondom de publicatielijst. A
 Zo wordt de zichtbaarheid van publicaties vergroot en kan er een netwerk om publicaties worden gebouwd. En geïnteresseerden zijn direct op de hoogte van elkaars nieuwe publicaties. 
 
 Het enige dat je hoeft te doen is vrienden worden via Friend Connect van Google. En lid worden van elkaars websites.
+
+##Software Licentie##
+
+In licentie gegeven krachtens de EUPL, versie 1.1 of –
+zodra deze worden goedgekeurd door de Europese Commissie
+- opeenvolgende versies van de EUPL (de "licentie");
+U mag dit werk niet gebruiken, behalve onder de
+voorwaarden van de licentie.
+U kunt een kopie van de licentie vinden op:
+
+http://ec.europa.eu/idabc/eupl5
+
+Tenzij dit op grond van toepasselijk recht vereist is
+of schriftelijk is overeengekomen, wordt software
+krachtens deze licentie verspreid "zoals deze is",
+ZONDER ENIGE GARANTIES OF VOORWAARDEN,
+noch expliciet noch impliciet.
+Zie de licentie voor de specifieke bepalingen voor
+toestemmingen en beperkingen op grond van de licentie.
