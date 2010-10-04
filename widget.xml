@@ -1,0 +1,581 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Module>
+	<ModulePrefs title="METIS" width="276">
+		<Require feature="opensocial-0.8"/>
+		<Require feature="views" />
+		<Require feature='tabs' /> 
+		<Require feature="dynamic-height"/>
+	</ModulePrefs>
+	<UserPref name="height" display_name="height" default_value="350" datatype="int" /> 
+  <Content type="html" view="home,profile,canvas">
+    <![CDATA[
+	<script>
+		var proxy = "http://metiswidget.demo.infi.nl/proxy/";
+
+		var itemsPerPage = 5;
+
+		gadgets.util.registerOnLoadHandler(init);
+		var globalView = gadgets.views.getCurrentView().getName();
+		var me = null;
+		var viewer = null;
+		var admins = null;
+
+		var logo = null;
+		var institution_name = null;
+
+		var institutions = null;
+		var institution = null;
+		var dai = null;
+		var categories = null;
+		var year = null;
+		var style = null;
+		var page = 1;
+		var oldIds = null;
+		var height = 400;
+		
+		function init() {
+		var prefs = new gadgets.Prefs();
+			height = prefs.getInt("height");	
+			document.getElementById('publications').style.height = height;
+			document.getElementById('activities').style.height = height;
+			document.getElementById('settings').style.height = height;
+			
+			loadData();
+		}
+       
+		function navigateToCanvas() {
+			var canvas = gadgets.views.getSupportedViews()["canvas"];
+			gadgets.views.requestNavigateTo(canvas);
+		}
+				
+		function isViewerAdmin() {
+			var admin = false
+			if (admins)
+			admins.each(function(person) {
+				if (viewer && person.getId() == viewer.getId()) {
+					admin = true;
+				}
+			});	
+			return admin;
+		}
+
+		// load the data using open social 
+		function loadData() {
+			var req = opensocial.newDataRequest();
+			req.add(req.newFetchPersonRequest('OWNER'), 'owner');
+			req.add(req.newFetchPersonRequest('VIEWER'), 'viewer');
+			req.add(req.newFetchPeopleRequest(new opensocial.IdSpec({'userId' : 'OWNER', 'groupId' : 'ADMINS'})), 'admins');
+			req.add(req.newFetchActivitiesRequest( new opensocial.IdSpec({'userId' : 'VIEWER', 'groupId' : 'FRIENDS'})), 'viewer_activities');
+			req.send(onLoadCallback);
+		}
+
+		// called after data is loaded
+		function onLoadCallback(data) {
+			viewer = data.get('viewer').getData();			
+			admins = data.get('admins').getData();
+			
+			if (isViewerAdmin()) {
+				createTabs();
+				showActivities(data);
+			}
+			
+			loadPrefs();			
+		}
+
+		function showActivities(data) {
+			var activities = data.get('viewer_activities').getData();
+
+			html = new Array();
+			html.push('<ul>');
+			activities.each(function(activity) {
+				if (activity.getField('title').indexOf("has updated his/her publication list") != -1)
+					html.push('<li>', activity.getField('title'), '</li>');
+			});
+			
+			html.push('</ul>');
+			document.getElementById('activities').innerHTML = html.join('');
+
+			gadgets.window.adjustHeight();
+		}
+
+		function publicationsToList(data) {
+			data = data.data;
+			if (data && data.length) {
+				if (data.length < itemsPerPage) {
+					document.getElementById('next').style.visibility = "hidden";
+				} else {
+					document.getElementById('next').style.visibility = "visible";
+				}
+			
+				if (page > 1) {
+					document.getElementById('prev').style.visibility = "visible";
+				} else {
+					document.getElementById('prev').style.visibility = "hidden";
+				}
+
+				var html = new Array();
+				html.push('<ul>');		
+			
+				for (var i = 0; i < data.length; i++) {					
+					html.push('<li>',gadgets.util.unescapeString(data[i]['result']));
+					if (isViewerAdmin()) {
+						html.push('<p><a href="javascript:postActivity(\''+gadgets.util.unescapeString(data[i]['result'])+'\');">Publish</a></p>');
+					}
+					html.push('</li>');
+				}  			
+		
+				html.push('</ul>');
+				return html.join('');
+			} else {
+				var html = new Array();
+				html.push('<p style=\'text-align: center;\'>No publications found</p>');
+				return html.join('');	
+			}
+		}
+
+		function loadPublications() {
+			var params = {};
+
+			params[gadgets.io.RequestParameters.CONTENT_TYPE] = gadgets.io.ContentType.JSON;
+			
+			var url = new Array();
+			var parameters = new Array();
+			
+			url.push(proxy)
+			url.push("researcher");	
+			url.push("/dai/"+dai);	
+			url.push("/results");	
+			url.push("/page/"+page);	
+			url.push("/size/"+itemsPerPage);	
+
+			parameters.push("period="+year);
+			parameters.push("institution="+institution);
+			parameters.push("nocache="+Math.random());
+			
+			if (categories) {
+				parameters.push('resultcategory='+categories.join(","));
+			}
+			
+			url = url.join("");
+			parameters = parameters.join("&");
+			
+			url = url + "?" + parameters;
+			
+			gadgets.io.makeRequest(url, onPublications, params);
+		}
+
+		function onPublications(data) {
+			document.getElementById('publications').innerHTML = publicationsToList(data);
+
+			if (globalView == "canvas")
+				document.getElementById('pagination').style.display = "block";
+	
+			if (globalView != "canvas")
+				document.getElementById('more').style.display = "table-cell";
+
+			gadgets.window.adjustHeight();
+
+		}
+	
+		//Load tabs
+		var tabs = new gadgets.TabSet(__MODULE_ID__, "My Publications");
+		function createTabs() {
+			tabs.addTab("My Publications", {
+				contentContainer: document.getElementById("tab1"),
+				callback: adjustHeight,
+				tooltip: "Your own publications" 
+			});
+
+			if (isViewerAdmin()) {
+				tabs.addTab("Network updates", {
+					contentContainer: document.getElementById("tab2"),
+					callback: adjustHeight,
+					tooltip: "Publications in your network" 
+				}); 
+				tabs.addTab("Settings", {
+					contentContainer: document.getElementById("tab3"),
+					callback: adjustHeight,
+					tooltip: "Settings of this widget" 
+				});
+			} else {
+				document.getElementById('settings').innerHTML = "";
+			}
+		}
+		//
+		//Load categories for settings tab
+		function loadCategories() {
+			var params = {};
+			params[gadgets.io.RequestParameters.CONTENT_TYPE] = gadgets.io.ContentType.JSON;
+			url = proxy+'resultcategories?institution='+institution+'&nocache='+Math.random();
+			gadgets.io.makeRequest(url, onCategoriesData, params);
+		}
+		
+		function onCategoriesData(data) {			
+			var results = data.data;
+
+			if (results && results.length) {
+				var html = new Array();	
+			
+				for (var i = 0; i < results.length; i++) {
+					html.push('<input type="checkbox" name="cat" value="',gadgets.util.escapeString(results[i]['id']),'" />',initialCap(gadgets.util.escapeString(results[i]['name'])));
+					html.push('<br />');
+				}  			
+		
+				document.getElementById('categories').innerHTML = html.join('');
+			}
+			showPrefs();
+			gadgets.window.adjustHeight();
+		}
+		//
+		
+		//
+		//Load institutions for settings tab
+		function loadInstitutions() {
+			var params = {};
+			params[gadgets.io.RequestParameters.CONTENT_TYPE] = gadgets.io.ContentType.JSON;
+			url = proxy+'institutions&nocache='+Math.random();
+			gadgets.io.makeRequest(url, onInstitutionsData, params);
+		}
+		
+		function onInstitutionsData(data) {			
+			var results = data.data;
+			institutions = results;
+
+			for ( var i in institutions) {
+				if (i == institution ) {
+					logo = institutions[i]['logo'];
+					institution_name = institutions[i]['name'];
+					break;
+				}
+			}
+			setLogo();
+	
+			if (institutions && isViewerAdmin()) {
+				var html = new Array();	
+
+				html.push('<select name="institution" id="institution" style="width: 100%;">');
+
+				for ( var i in institutions) {
+					html.push('<option value="'+gadgets.util.escapeString(i)+'">'+gadgets.util.escapeString(institutions[i]['name'])+'</options>');
+				}			
+		
+				html.push('</select>');
+
+				document.getElementById('institutions').innerHTML = html.join('');
+			
+				loadCategories();
+			}		
+
+			gadgets.window.adjustHeight();
+		}
+		//
+
+
+		function adjustHeight() {
+			gadgets.window.adjustHeight();
+		}
+
+		function savePrefs(form) {	
+			document.getElementById('saved').innerHTML = "Saving...";		
+			
+			institution = form.institution.value;
+			dai = form.dai.value;
+
+			var categories = new Array(); 
+			boxes = form.cat.length;
+			for (i = 0; i < boxes; i++) {
+				if (document.prefs.cat[i].checked) {
+					categories.push(document.prefs.cat[i].value);
+				}
+			}
+
+			year = form.year.value;
+			style = form.style.value;
+
+			var req = opensocial.newDataRequest();
+			req.add(req.newUpdatePersonAppDataRequest("VIEWER", "institution", institution));
+			req.add(req.newUpdatePersonAppDataRequest("VIEWER", "dai", dai));
+			req.add(req.newUpdatePersonAppDataRequest("VIEWER", "categories", categories));
+			req.add(req.newUpdatePersonAppDataRequest("VIEWER", "year", year));
+			req.add(req.newUpdatePersonAppDataRequest("VIEWER", "style", style));
+
+			req.send(handlePrefs);		
+		}
+
+		function handlePrefs(data) {
+			if (data.hadError()) {
+				htmlout += data.getErrorMessage();				
+				document.getElementById('saved').innerHTML = htmlout;
+			} else {
+				document.getElementById('saved').innerHTML = "Settings saved.";
+			}
+			
+			loadPrefs();
+		}
+
+		function loadPrefs() {
+			var req = opensocial.newDataRequest(); 
+			var fields = [ "institution", "dai", "categories", "year", "style", "oldIds"]; 
+			var p = {}; 
+   			
+			p[opensocial.IdSpec.Field.USER_ID] = "OWNER"; 
+			var idSpec = opensocial.newIdSpec(p); 
+			req.add(req.newFetchPersonAppDataRequest(idSpec, fields), "owner_data"); 
+
+			req.send(handleRequestPrefs);
+		}
+
+		function handleRequestPrefs(data) {
+			var mydata = data.get("owner_data");
+
+			if (mydata.hadError()) {
+				htmlout += data.getErrorMessage();
+				return;
+			}
+			
+			data = mydata.getData();
+			var mydata = null;
+
+			admins.each(function(person) {
+				if (data[person.getId()]) {
+					mydata = data[person.getId()];
+				}
+			});
+
+			if (mydata) {
+				institution = mydata["institution"];
+
+				dai = mydata["dai"];
+				categories = !(/[^,:{}\[\]0-9.\-+Eaeflnr-u \n\r\t]/.test(
+								mydata["categories"].replace(/"(\\.|[^"\\])*"/g, ''))) 
+								&&
+								eval(mydata["categories"]);
+				year = mydata["year"];
+				style = mydata["style"];	
+
+				if (mydata["oldIds"])
+				oldIds = !(/[^,:{}\[\]0-9.\-+Eaeflnr-u \n\r\t]/.test(
+								mydata["oldIds"].replace(/"(\\.|[^"\\])*"/g, ''))) 
+								&&
+								eval(mydata["oldIds"]);
+
+				if (!oldIds) {
+					oldIds = new Array();
+				}
+			}
+			loadPublications();
+			
+			loadInstitutions();			
+		}
+
+		function showPrefs() {
+			if (isViewerAdmin()) {			
+				document.getElementById('institution').value  = institution ;
+				document.getElementById('dai').value  = dai;
+
+				boxes = document.prefs.cat.length;
+				for (i = 0; i < boxes; i++) {
+					for(var o=0; o <  categories.length; o++) {			
+						if (document.prefs.cat[i].value == categories[o]) {				
+							document.prefs.cat[i].checked = true;
+						}
+					}
+				}
+
+				document.getElementById('year').value  = year;
+				document.getElementById('style').value  = style;
+
+			}
+		}
+
+		function prev() {
+			if (page > 1) {
+				page--;
+				loadPublications();
+			}
+		}
+	
+		function next() {
+			page++;
+			loadPublications();
+		} 
+		
+ 		function postActivity(text) {  
+    			var params = {};  
+    			params[opensocial.Activity.Field.TITLE] = viewer.getDisplayName() + " has updated his/her publication list:<br />" + text;
+			//params[opensocial.Activity.Field.EXTERNAL_ID] = 'metis';
+    			var activity = opensocial.newActivity(params); 
+    			opensocial.requestCreateActivity(activity, opensocial.CreateActivityPriority.HIGH);
+  		};    
+
+		function initialCap(val) {
+			return val.substr(0, 1).toUpperCase() + val.substr(1);
+		}
+
+		function setLogo() {
+			html = new Array();
+			html.push('<img src="',logo,'" />','<br />',institution_name);
+			document.getElementById('logo').innerHTML = html.join('');
+		}
+	</script>
+	<style>
+	div, table{ 
+		font-size:12px; 
+		font-family:arial,sans-serif;
+		margin:0;
+	}
+	
+	.tablib_table {
+		background-color:#E0ECFF;
+	}
+	
+	.tablib_unselected {
+		
+	}
+	
+	.tablib_selected {
+		
+	}
+	
+	.tablib_spacerTab {
+		border-bottom:1px solid #676767;
+		padding:0;
+		width:0;
+	}
+	
+	#settings {
+		padding: 5px;
+	}
+	
+	#prev {
+		float: left;
+		margin-left: 17px;
+	}
+	
+	#next {
+		float: right;
+		margin-right: 17px;
+	}
+	
+	a, a:visited, a:active {	
+		cursor: pointer;
+		color: #3366CC;
+		font-size:11px; 
+		text-decoration: none;
+	}
+	
+	a:hover {
+		color: #3396CC;
+	}
+	
+	ul {
+		padding:0 0 0 17px;
+		list-style: none;
+	}
+	
+	li {
+		margin-bottom:15px;
+	}
+
+	.tablib_unselected {
+	  border-bottom: 1px solid #86A1C4;
+	}
+
+	td.tablib_unselected:hover {
+	  color: #00344F;
+	}
+	
+	.tablib_spacerTab, .tablib_emptyTab {
+	  border-bottom: 1px solid #86A1C4;
+	}
+
+	</style>
+	<!--[if IE]>
+		<style>
+			#publications {
+				margin-top: 5px;
+				margin-left: -45px;
+			}
+			#activities {
+				margin-top: 5px;
+				margin-left: -45px;
+			}
+		</style>
+	<![endif]-->
+	<div id='tabs'>
+		<div id="tab1"> 
+			<div id="publications" style="overflow: auto;padding-left:10px;padding-right:10px;">
+				<p style='text-align: center;'>Loading publications...</p>
+			</div>
+			<div id="pagination" style="display:none; margin-bottom: 10px;">
+				<a id="prev" onClick="prev();">&laquo; Previous</a>
+				<a id="next" onClick="next();">Next &raquo;</a>
+			</div>
+		</div>
+		<div id="tab2" style="display:none">
+			<div id="activities" style="overflow: auto;padding-left:10px;padding-right:10px;">
+			</div>
+		</div>
+		<div id="tab3" style="display:none">
+			<div id="settings" style="overflow: auto;padding-left:10px;padding-right:10px;">
+				<form name="prefs" />
+					<table>
+					<tr style="text-align: left;">
+						<th colspan="2">Settings</th>
+					</tr>
+					<tr>
+						<td style="width: 25%">Institution:</td>
+						<td style="width: 170px;">
+							<div id="institutions"></div>
+						</td>
+					</tr>
+					<tr>
+						<td>Digital Author Identity (DAI):</td>
+						<td><input type="text" name="dai" id="dai" style="width: 100%;"/></td>
+					</tr>
+					<tr>	
+						<td></td>
+						<td><a href="javascript:alert('Please find your DAI on Narcis (http://www.narcis.info/) or contact your Metis administrator')">Get DAI</a></td>
+					</tr>
+					<tr style="text-align: left;">
+						<th colspan="2">Advanced options</th>
+					</tr>
+					<tr>
+						<td valign="top">Categories:</td>
+						<td><div id="categories"></div></td>
+					</tr>
+					<tr>
+						<td>Year (from):</td>
+						<td><input type="text" name="year"  id="year" style="width: 100%;"/></td>
+					</tr>
+					<tr>
+						<td>Style:</td>
+						<td>
+							<select name="style" id="style" style="width: 100%;">
+								<option value="1">Style 1</option>
+								<option value="2">Style 2</option>
+							</select>
+						</td>
+					</tr>
+					<tr>
+						<td colspan="2" style="text-align: right;">							
+							<input type="button" value="Save" onClick="savePrefs(this.form);" />							
+						</td>
+					</tr>
+					<tr>
+						<td colspan="2">
+							<div id="saved"></div>
+						</td>
+					</tr>
+					</table>					
+				</form>	
+			</div>
+		</div>
+	</div>   
+       <div id='more' style='display: none; width: 100%;vertical-align:bottom; text-align: right;'><a href='javascript:void(0);' onclick='navigateToCanvas();'>See all of my publications</a></div>
+ 	<div style='color: #000; border-top: 1px solid #CCC; padding: 5px;'>
+        	<div id='logo'></div>
+    	</div>    
+    ]]>
+  </Content>
+</Module>
